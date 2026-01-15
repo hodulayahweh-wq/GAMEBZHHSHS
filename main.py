@@ -8,7 +8,7 @@ import pandas as pd
 from flask import Flask, Response, request, jsonify
 
 # ================= AYARLAR =================
-TOKEN = "8118811696:AAEPrm_X-bemvxnjG4Hwi_yZaHWhT0Qt5iw"
+TOKEN = "8118811696:AAEvD55aW7huynLUAlLy8Ynfqd-kea_neow"
 RENDER_NAME = "gamebzhhshs"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
