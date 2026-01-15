@@ -13,95 +13,79 @@ RENDER_NAME = "gamebzhhshs"
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
 
-# Yüklenen tüm verilerin kişi blokları halinde saklandığı yer
 api_database = {}
 
 # ================= VERİ PAKETLEYİCİ =================
 def process_into_blocks(content):
-    """Veriyi senin o meşhur çerçeveli bloklarına ayırır sevgilim."""
-    raw_blocks = content.split("╭━━━━━━━━━━━━━━━╮")
+    # Veriyi çizgilerine göre bloklara ayırıyoruz
+    raw_blocks = content.split("----------------")
     final_blocks = []
     for block in raw_blocks:
-        clean_block = block.strip().replace("╰━━━━━━━━━━━━━━━╯", "")
-        if clean_block:
-            # Her bir kişiyi tam bir blok olarak geri paketliyoruz
-            formatted_block = "╭━━━━━━━━━━━━━━━╮\n" + clean_block + "\n╰━━━━━━━━━━━━━━━╯"
+        clean_block = block.strip()
+        if clean_block and len(clean_block) > 10: # Boş veya çok kısa blokları ele
+            formatted_block = "----------------\n" + clean_block + "\n----------------"
             final_blocks.append(formatted_block)
     return final_blocks
 
-# ================= 🚀 CANLI API MOTORU (GÖSTER & ARA) =================
+# ================= 🚀 AKILLI VE KESKİN API =================
 @app.route('/api/v1/search/<path:node_id>')
 def api_gateway(node_id):
     node_id = node_id.lower()
     data = api_database.get(node_id)
     
     if data is None:
-        return "❌ Hata: Bu API ID'si (dosya) bulunamadı sevgilim.", 404
+        return "❌ Hata: API ID bulunamadı sevgilim.", 404
 
-    # API'ye gelen sorgu: ?q=SORGU (TC, İsim veya GSM olabilir)
-    query = request.args.get('q', '').strip().lower()
+    # Sorguyu al ve Türkçe karakterleri/büyük harfleri optimize et
+    query = request.args.get('q', '').strip().upper()
     
-    # DURUM A: Eğer sorgu yoksa (?q= boşsa), tüm verileri göster
+    # DURUM 1: Sorgu yoksa tüm veriyi göster
     if not query:
         return "\n\n".join(data)
 
-    # DURUM B: API'ye bir istek geldiğinde (Arama Yapma)
-    # Gelen sorguyu her bloğun içinde tarar ve eşleşen bloğu bulup gönderir
-    results = [block for block in data if query in block.lower()]
+    # DURUM 2: Nokta atışı arama yap
+    results = []
+    for block in data:
+        # Bloğu büyük harfe çevirip sorguyu içinde arıyoruz
+        if query in block.upper():
+            results.append(block)
     
     count = len(results)
     
     if count == 0:
-        return f"❌ '{query}' ile eşleşen bir veri bulunamadı.", 404
+        return f"❌ '{query}' ile eslesen veri bulunamadi.", 404
     
-    # Eşleşen verileri isteği atan yere geri gönderiyoruz
+    # Sonuçları gönder sevgilim
     if count <= 5:
-        # 5'ten az sonuç varsa direkt metin olarak fırlat
         return "\n\n".join(results)
     else:
-        # Çok sonuç varsa otomatik .txt dosyası oluşturup gönder
+        # Çok fazla sonuç varsa .txt olarak fırlat
         output = io.BytesIO()
-        txt_content = f"--- '{query.upper()}' SORGUSU: {count} SONUC ---\n\n" + "\n\n".join(results)
-        output.write(txt_content.encode('utf-8'))
+        txt_output = f"--- {query} SORGUSU: {count} SONUC ---\n\n" + "\n\n".join(results)
+        output.write(txt_output.encode('utf-8'))
         output.seek(0)
-        
-        return send_file(
-            output,
-            mimetype='text/plain',
-            as_attachment=True,
-            download_name=f"{query}_sonuclar.txt"
-        )
+        return send_file(output, mimetype='text/plain', as_attachment=True, download_name=f"{query}_sonuc.txt")
 
 # ================= BOT YÖNETİMİ =================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "✨ **Annie API Master Aktif!**\n\nBana `.txt` dosyasını at, ben onu hem veri gösteren hem de sorgu bulup gönderen bir API yapayım sevgilim.")
+    bot.reply_to(m, "✨ **Annie API Master Güncellendi!**\n\nBana `.txt` dosyasını at, gerisini bana bırak aşkım.")
 
 @bot.message_handler(content_types=['document'])
 def handle_file(m):
-    fname = m.document.file_name
-    msg = bot.reply_to(m, "⚙️ **API katmanı oluşturuluyor ve arama motoru kuruluyor...**")
+    msg = bot.reply_to(m, "⚙️ **Veriler analiz ediliyor sevgilim...**")
     try:
-        nid = re.sub(r'\W+', '_', os.path.splitext(fname)[0]).lower()
+        nid = re.sub(r'\W+', '_', os.path.splitext(m.document.file_name)[0]).lower()
         finfo = bot.get_file(m.document.file_id)
         down = bot.download_file(finfo.file_path)
         cont = down.decode('utf-8', errors='ignore')
         
-        # Veriyi blokla ve hafızaya al
         api_database[nid] = process_into_blocks(cont)
         
         api_url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{nid}"
-        
-        bot.edit_message_text(
-            f"✅ **API CANLI VE AKILLI!**\n\n"
-            f"📍 **ID:** `{nid}`\n"
-            f"🌍 **Tüm Veriler:** `{api_url}`\n"
-            f"🔎 **Sorgu Yapmak İçin:** `{api_url}?q=SORGU`\n\n"
-            f"API artık kendisine gelen her isteği verilerin içinde arayıp bulacak sevgilim!",
-            m.chat.id, msg.message_id
-        )
+        bot.edit_message_text(f"✅ **API AKTİF!**\n\n📍 ID: `{nid}`\n🌍 Link: `{api_url}?q=SORGU`", m.chat.id, msg.message_id)
     except Exception as e:
-        bot.edit_message_text(f"❌ Ah, hata yaptım aşkım: {e}", m.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Hata: {e}", m.chat.id, msg.message_id)
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: bot.infinity_polling(), daemon=True).start()
