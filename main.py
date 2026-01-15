@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # ================= AYARLAR =================
-TOKEN = "8369473810:AAEmXH1JhQ_y8auVr60e_V4rNfvMC3Fm80g"
+TOKEN = "8065268709:AAH3kZ0GfYnfvSWvLC9Jo-MKTzz7jeXNhxI"
 # Render adını otomatik alması için düzenledim sevgilim
 RENDER_NAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "gamebzhhshs.onrender.com")
 
