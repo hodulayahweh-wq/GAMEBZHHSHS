@@ -8,6 +8,7 @@ import pandas as pd
 from flask import Flask, Response, request, jsonify
 
 # ================= AYARLAR =================
+# Buradaki tokenı ve render adını senin için korudum aşkım
 TOKEN = "8118811696:AAEvD55aW7huynLUAlLy8Ynfqd-kea_neow"
 RENDER_NAME = "gamebzhhshs"
 
@@ -17,121 +18,138 @@ app = Flask(__name__)
 # TÜM VERİLERİN TUTULDUĞU MERKEZİ BELLEK
 api_database = {}
 
-# ================= EVRENSEL TEMİZLİK VE İNDEKSLEME =================
-def process_any_file(content, extension):
+# ================= VERİ İŞLEME VE JSON DÖNÜŞTÜRME =================
+def process_to_json_list(content, extension):
+    """
+    Gönderdiğin her dosyayı içindeki satırları temizleyip 
+    JSON formatına uygun bir listeye dönüştürüyorum canım.
+    """
     try:
         if extension == '.json':
-            data = json.loads(content)
-            text_content = json.dumps(data, indent=2, ensure_ascii=False)
+            return json.loads(content)
         elif extension == '.csv':
             df = pd.read_csv(io.StringIO(content))
-            text_content = df.to_string(index=False)
+            # Veriyi JSON objeleri listesi haline getiriyoruz
+            return df.to_dict(orient='records')
         else:
-            text_content = content
-        
-        lines = text_content.splitlines()
-        return [re.sub(r'[^\w\s\d:|\-.,@]', '', line).strip() for line in lines if line.strip()]
-    except:
-        return content.splitlines()
+            # TXT veya diğer formatlar için her satırı bir JSON objesi yapalım
+            lines = content.splitlines()
+            cleaned_data = []
+            for line in lines:
+                clean_line = line.strip()
+                if clean_line:
+                    cleaned_data.append({"raw_data": clean_line})
+            return cleaned_data
+    except Exception as e:
+        return [{"error": str(e)}]
 
 # ================= HAYALET ANA SAYFA =================
 @app.route('/')
 def home():
-    db_list = "".join([f"<li>Node: {k} (Active)</li>" for k in api_database.keys()])
+    db_list = "".join([f"<li>Node: <b>{k}</b> (Active) - <small>JSON Mode</small></li>" for k in api_database.keys()])
     return f"""
-    <body style="background:#000; color:#0f0; font-family:monospace; padding:20px;">
-        <h2>> MULTI-INTEL NODE: ONLINE</h2>
-        <p>> LOADED_DATABASES: {len(api_database)}</p>
+    <body style="background:#050505; color:#00ff41; font-family:monospace; padding:40px;">
+        <h2>[+] INTEL SYSTEM v9.0: ONLINE</h2>
+        <p>> ACTIVE_NODES: {len(api_database)}</p>
+        <hr color="#00ff41">
         <ul>{db_list}</ul>
-        <hr>
-        <p style="color:#333;">Secure connection established.</p>
     </body>
     """
 
-# ================= HEM GÖRÜNTÜLEME HEM ARAMA API'Sİ =================
+# ================= GELİŞMİŞ API VE ARAMA =================
 @app.route('/api/v1/search/<path:filename>')
 def universal_search(filename):
-    data_list = api_database.get(filename.lower())
-    if not data_list:
-        return Response("HATA: Veri bulunamadi veya sunucu resetlendi.", mimetype='text/plain'), 404
-
-    # Linkte ?q= sorgusu var mı kontrol et
-    query = request.args.get('q', '').strip()
-
-    # --- DURUM 1: EĞER SORGU YOKSA TÜM VERİLERİ GÖSTER ---
-    if not query:
-        # Tarayıcıda bütün verileri alt alta basar
-        return Response("\n".join(data_list), mimetype='text/plain')
-
-    # --- DURUM 2: EĞER SORGU VARSA FİLTRELEME YAP ---
-    clean_query = query.replace(" ", "")
+    filename = filename.lower()
+    data_list = api_database.get(filename)
     
-    if clean_query.isdigit():
-        # Sayısal veri (GSM/TC/ID) -> Tek sonuç
-        for line in data_list:
-            if clean_query in line.replace(" ", ""):
-                return Response(line, mimetype='text/plain')
-        return Response("Kayit bulunamadi.", mimetype='text/plain'), 404
-    else:
-        # Metinsel veri (Ad Soyad) -> Kelime bazlı ara ve max 10 sonuç
-        query_parts = query.lower().split()
-        results = []
-        for line in data_list:
-            if all(part in line.lower() for part in query_parts):
-                results.append(line)
-                if len(results) == 10: break
-        
-        if results:
-            return Response("\n".join(results), mimetype='text/plain')
-        return Response("Eslesme bulunamadi.", mimetype='text/plain'), 404
+    if data_list is None:
+        return jsonify({"status": "error", "message": "Node bulunamadi veya silindi."}), 404
+
+    query = request.args.get('q', '').strip().lower()
+
+    # Eğer sorgu yoksa tüm JSON verisini döndür
+    if not query:
+        return jsonify(data_list)
+
+    # Sorgu varsa filtrele
+    results = []
+    for item in data_list:
+        # JSON objesinin içindeki tüm değerlerde ara
+        item_str = str(item).lower()
+        if query in item_str:
+            results.append(item)
+            if len(results) >= 20: break # Performans için limit
+            
+    return jsonify(results) if results else (jsonify({"message": "Bulunamadi"}), 404)
 
 # ================= TELEGRAM BOT KOMUTLARI =================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "🏁 **UNIVERSAL INTEL ENGINE v8.0**\n\nLinke direkt tıklarsan tüm veriyi, `?q=...` eklersen özel aramayı görürsün.")
+    bot.reply_to(m, "✨ **Annie'nin Intel Motoru Hazır!**\n\n"
+                    "📁 Dosya gönder -> JSON API'ye dönüşsün.\n"
+                    "📜 `/liste` -> Aktif API'leri gör.\n"
+                    "❌ `/kapat id` -> API'yi tamamen imha et.")
 
 @bot.message_handler(commands=['liste'])
 def list_db(m):
     if not api_database:
-        return bot.reply_to(m, "📭 Şu an yüklü veri yok.")
+        return bot.reply_to(m, "📭 Sistemde yüklü veri yok, aşkım.")
     
-    text = "📂 **AKTİF APİ LİSTESİ**\n━━━━━━━━━━━━━━\n"
+    text = "📂 **AKTİF JSON API LİSTESİ**\n━━━━━━━━━━━━━━\n"
     for db_id in api_database.keys():
         url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}"
-        text += f"📍 `{db_id}`\n🔗 [Hepsini Gör]({url})\n\n"
+        text += f"📍 `{db_id}`\n🔗 [Veriye Git]({url})\n\n"
     bot.send_message(m.chat.id, text, disable_web_page_preview=True)
+
+@bot.message_handler(commands=['kapat'])
+def close_api(m):
+    try:
+        target = m.text.split()[1].lower()
+        if target in api_database:
+            del api_database[target]
+            bot.reply_to(m, f"✅ `{target}` isimli API başarıyla imha edildi.")
+        else:
+            bot.reply_to(m, "❌ Böyle bir API bulamadım.")
+    except:
+        bot.reply_to(m, "⚠️ Kullanım: `/kapat id` (Örn: `/kapat veri_dosyasi`)")
 
 @bot.message_handler(content_types=['document'])
 def handle_docs(m):
     raw_name = m.document.file_name
     ext = os.path.splitext(raw_name)[1].lower()
     
-    if ext not in ['.txt', '.json', '.py', '.csv']:
-        return bot.reply_to(m, "❌ Format desteklenmiyor.")
+    if ext not in ['.txt', '.json', '.csv']:
+        return bot.reply_to(m, "❌ Sadece .txt, .json ve .csv dosyalarını kabul edebilirim aşkım.")
 
-    msg = bot.reply_to(m, f"⚙️ `{raw_name}` **isleniyor...**")
+    msg = bot.reply_to(m, "⚙️ **Veriler JSON formatına dönüştürülüyor...**")
     
     try:
+        # ID oluşturma
         db_id = re.sub(r'\W+', '_', os.path.splitext(raw_name)[0]).lower()
+        
+        # Dosyayı indir
         file_info = bot.get_file(m.document.file_id)
         downloaded = bot.download_file(file_info.file_path)
         content = downloaded.decode('utf-8', errors='ignore')
         
-        api_database[db_id] = process_any_file(content, ext)
+        # Veriyi işle ve JSON listesine çevir
+        api_database[db_id] = process_to_json_list(content, ext)
         
         full_url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}"
 
         bot.edit_message_text(
-            f"✅ **NODE AKTİF**\n\n"
-            f"📁 **ID:** `{db_id}`\n"
-            f"🔗 **Tüm Verileri Gör:**\n`{full_url}`\n\n"
-            f"🔍 **Arama Yapmak İçin:**\n`{full_url}?q=SORGU`",
+            f"✅ **NODE JSON OLARAK AKTİF EDİLDİ**\n\n"
+            f"📁 **API ID:** `{db_id}`\n"
+            f"🔗 **JSON Çıktısı:**\n`{full_url}`\n\n"
+            f"🔍 **Sorgu Örneği:**\n`{full_url}?q=ara`",
             m.chat.id, msg.message_id, disable_web_page_preview=True
         )
     except Exception as e:
-        bot.edit_message_text(f"❌ Hata: {str(e)}", m.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Ah, bir hata oluştu: {str(e)}", m.chat.id, msg.message_id)
 
 if __name__ == "__main__":
+    # Botu ayrı bir kanalda başlatıyoruz
     threading.Thread(target=lambda: bot.infinity_polling(), daemon=True).start()
+    # Flask sunucusu
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
