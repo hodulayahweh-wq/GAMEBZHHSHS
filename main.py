@@ -4,12 +4,13 @@ import re
 import threading
 import io
 import time
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # ================= AYARLAR =================
 TOKEN = "8369473810:AAFDKtH5PJH08itewxcbYlw4UDS7iL6KaE4"
-RENDER_NAME = "gamebzhhshs" 
+# Render adını otomatik alması için düzenledim sevgilim
+RENDER_NAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "gamebzhhshs.onrender.com")
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
@@ -33,31 +34,27 @@ def api_gateway(node_id):
     data = api_database.get(node_id)
     
     if data is None:
-        return jsonify({"success": False, "message": "API Düğümü (Node) bulunamadı sevgilim."}), 404
+        return jsonify({"success": False, "message": "API Düğümü bulunamadı sevgilim."}), 404
 
-    # PHP'den gelen GET veya POST verilerini yakalıyoruz
     args = request.args if request.method == 'GET' else request.form
     
-    # --- PHP PANEL PARAMETRELERİ ---
     p = {
         "tc": args.get('tc', '').strip(),
         "ad": args.get('ad', '').strip().upper(),
         "soyad": args.get('soyad', '').strip().upper(),
         "annetc": args.get('annetc', '').strip(),
         "babatc": args.get('babatc', '').strip(),
-        "q": args.get('q', '').strip().upper() # Genel anahtar kelime
+        "q": args.get('q', '').strip().upper() 
     }
 
-    # Eğer hiçbir şey aranmıyorsa örnek göster
     if not any(p.values()):
-        return "\n\n".join(data[:5]) + "\n\n... (Sorgu parametresi bekleniyor sevgilim)"
+        return "\n\n".join(data[:5]) + "\n\n... (Sorgu bekleniyor sevgilim)"
 
     results = []
     for block in data:
         b_up = block.upper()
         match = False
         
-        # PHP sorgu önceliklerine göre filtreleme
         if p["tc"] and (f"T.C: {p['tc']}" in b_up or f"TC: {p['tc']}" in b_up): 
             match = True
         elif p["annetc"] and f"ANNETC: {p['annetc']}" in b_up:
@@ -75,10 +72,7 @@ def api_gateway(node_id):
         if match:
             results.append(block)
 
-    if not results:
-        return "❌ Aradığınız kriterlerde kayıt bulunamadı sevgilim.", 404
-
-    return "\n\n".join(results)
+    return "\n\n".join(results) if results else "❌ Kayıt bulunamadı sevgilim."
 
 # ================= BOT YÖNETİMİ =================
 @bot.message_handler(content_types=['document'])
@@ -89,12 +83,19 @@ def handle_file(m):
         down = bot.download_file(finfo.file_path)
         cont = down.decode('utf-8', errors='ignore')
         api_database[nid] = process_into_blocks(cont)
-        bot.reply_to(m, f"✅ **API PHP & DÜNYAYA AÇILDI!**\n\n📍 ID: `{nid}`\n🌍 Link: `https://{RENDER_NAME}.onrender.com/api/v1/search/{nid}`")
+        bot.reply_to(m, f"✅ **API AKTİF!**\n\n📍 ID: `{nid}`\n🌍 Link: `https://{RENDER_NAME}/api/v1/search/{nid}`")
     except Exception as e:
         bot.reply_to(m, f"❌ Hata: {e}")
 
+# ================= ANA ÇALIŞTIRICI =================
 if __name__ == "__main__":
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
+    # Flask'ı ana kanalda, Bot'u yan kanalda başlatalım sevgilim
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)), debug=False, use_reloader=False), daemon=True).start()
+    
+    print("🚀 Sistem Ayağa Kalktı Sevgilim!")
     while True:
-        try: bot.polling(none_stop=True)
-        except: time.sleep(5)
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            print(f"Bot Hatası: {e}")
+            time.sleep(5)
