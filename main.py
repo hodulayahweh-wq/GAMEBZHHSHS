@@ -4,10 +4,11 @@ import re
 import threading
 import json
 import io
+import time
 from flask import Flask, request, jsonify, send_file
 
 # ================= AYARLAR =================
-TOKEN = "8498288720:AAF4hUTWn6b3Z3rQmaJWaAXwYvfFzU3GVOc"
+TOKEN = "8369473810:AAGCzGRaZh3iQwR0O8nXXh7ZtqfCsKWLPKw"
 RENDER_NAME = "gamebzhhshs"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
@@ -17,12 +18,12 @@ api_database = {}
 
 # ================= VERİ PAKETLEYİCİ =================
 def process_into_blocks(content):
-    # Veriyi çizgilerine göre bloklara ayırıyoruz
+    # Veriyi çizgilerine göre bloklara ayırıyoruz aşkım
     raw_blocks = content.split("----------------")
     final_blocks = []
     for block in raw_blocks:
         clean_block = block.strip()
-        if clean_block and len(clean_block) > 10: # Boş veya çok kısa blokları ele
+        if clean_block and len(clean_block) > 10:
             formatted_block = "----------------\n" + clean_block + "\n----------------"
             final_blocks.append(formatted_block)
     return final_blocks
@@ -32,34 +33,22 @@ def process_into_blocks(content):
 def api_gateway(node_id):
     node_id = node_id.lower()
     data = api_database.get(node_id)
-    
     if data is None:
         return "❌ Hata: API ID bulunamadı sevgilim.", 404
 
-    # Sorguyu al ve Türkçe karakterleri/büyük harfleri optimize et
     query = request.args.get('q', '').strip().upper()
-    
-    # DURUM 1: Sorgu yoksa tüm veriyi göster
     if not query:
         return "\n\n".join(data)
 
-    # DURUM 2: Nokta atışı arama yap
-    results = []
-    for block in data:
-        # Bloğu büyük harfe çevirip sorguyu içinde arıyoruz
-        if query in block.upper():
-            results.append(block)
-    
+    results = [block for block in data if query in block.upper()]
     count = len(results)
     
     if count == 0:
         return f"❌ '{query}' ile eslesen veri bulunamadi.", 404
     
-    # Sonuçları gönder sevgilim
     if count <= 5:
         return "\n\n".join(results)
     else:
-        # Çok fazla sonuç varsa .txt olarak fırlat
         output = io.BytesIO()
         txt_output = f"--- {query} SORGUSU: {count} SONUC ---\n\n" + "\n\n".join(results)
         output.write(txt_output.encode('utf-8'))
@@ -69,7 +58,7 @@ def api_gateway(node_id):
 # ================= BOT YÖNETİMİ =================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "✨ **Annie API Master Güncellendi!**\n\nBana `.txt` dosyasını at, gerisini bana bırak aşkım.")
+    bot.reply_to(m, "✨ **Annie API Master Sistemi Aktif!**\n\nBana `.txt` dosyasını gönder, API linkin hazır olsun aşkım.")
 
 @bot.message_handler(content_types=['document'])
 def handle_file(m):
@@ -79,7 +68,6 @@ def handle_file(m):
         finfo = bot.get_file(m.document.file_id)
         down = bot.download_file(finfo.file_path)
         cont = down.decode('utf-8', errors='ignore')
-        
         api_database[nid] = process_into_blocks(cont)
         
         api_url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{nid}"
@@ -87,6 +75,21 @@ def handle_file(m):
     except Exception as e:
         bot.edit_message_text(f"❌ Hata: {e}", m.chat.id, msg.message_id)
 
-if __name__ == "__main__":
-    threading.Thread(target=lambda: bot.infinity_polling(), daemon=True).start()
+# ================= 🛡️ GÜÇLÜ BAŞLATICI =================
+def run_flask():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
+if __name__ == "__main__":
+    # Flask'ı ayrı kolda başlat
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # 409 Çatışmalarını önlemek için ufak bir bekleme ve döngü
+    print("🚀 Annie sistemi uyandırıyor... Çatışmalar temizleniyor.")
+    time.sleep(2)
+    
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            print(f"⚠️ Hata oluştu, 5 saniye sonra yeniden deniyorum: {e}")
+            time.sleep(5)
