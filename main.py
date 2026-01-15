@@ -8,7 +8,7 @@ import pandas as pd
 from flask import Flask, Response, request, jsonify
 
 # ================= AYARLAR =================
-TOKEN = "8173921081:AAFX7vtywKCMEupTwOI5qewDgYqaQ6yRQlM"
+TOKEN = "8118811696:AAEPrm_X-bemvxnjG4Hwi_yZaHWhT0Qt5iw"
 RENDER_NAME = "gamebzhhshs"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
@@ -30,7 +30,6 @@ def process_any_file(content, extension):
             text_content = content
         
         lines = text_content.splitlines()
-        # Veriyi temizle ve listeye çevir (Gereksiz karakterleri ayıklar)
         return [re.sub(r'[^\w\s\d:|\-.,@]', '', line).strip() for line in lines if line.strip()]
     except:
         return content.splitlines()
@@ -38,7 +37,6 @@ def process_any_file(content, extension):
 # ================= HAYALET ANA SAYFA =================
 @app.route('/')
 def home():
-    # Render incelemesi için masum ama senin için bilgi dolu sayfa
     db_list = "".join([f"<li>Node: {k} (Active)</li>" for k in api_database.keys()])
     return f"""
     <body style="background:#000; color:#0f0; font-family:monospace; padding:20px;">
@@ -46,22 +44,26 @@ def home():
         <p>> LOADED_DATABASES: {len(api_database)}</p>
         <ul>{db_list}</ul>
         <hr>
-        <p style="color:#333;">Secure connection established. No logs stored.</p>
+        <p style="color:#333;">Secure connection established.</p>
     </body>
     """
 
-# ================= EVRENSEL AKILLI ARAMA API'Sİ =================
+# ================= HEM GÖRÜNTÜLEME HEM ARAMA API'Sİ =================
 @app.route('/api/v1/search/<path:filename>')
 def universal_search(filename):
-    query = request.args.get('q', '').strip()
-    if not query:
-        return Response("HATA: Sorgu parametresi bos (?q=...)", mimetype='text/plain'), 400
-    
     data_list = api_database.get(filename.lower())
     if not data_list:
         return Response("HATA: Veri bulunamadi veya sunucu resetlendi.", mimetype='text/plain'), 404
 
-    # AKILLI AYIRIM
+    # Linkte ?q= sorgusu var mı kontrol et
+    query = request.args.get('q', '').strip()
+
+    # --- DURUM 1: EĞER SORGU YOKSA TÜM VERİLERİ GÖSTER ---
+    if not query:
+        # Tarayıcıda bütün verileri alt alta basar
+        return Response("\n".join(data_list), mimetype='text/plain')
+
+    # --- DURUM 2: EĞER SORGU VARSA FİLTRELEME YAP ---
     clean_query = query.replace(" ", "")
     
     if clean_query.isdigit():
@@ -80,24 +82,23 @@ def universal_search(filename):
                 if len(results) == 10: break
         
         if results:
-            # Verileri alt alta tertemiz basar
             return Response("\n".join(results), mimetype='text/plain')
         return Response("Eslesme bulunamadi.", mimetype='text/plain'), 404
 
 # ================= TELEGRAM BOT KOMUTLARI =================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "🏁 **UNIVERSAL INTEL ENGINE v7.5**\n\nVeri dosyalarını at, API anında oluşsun.\n\n📜 `/liste` - Aktif API'leri gör.")
+    bot.reply_to(m, "🏁 **UNIVERSAL INTEL ENGINE v8.0**\n\nLinke direkt tıklarsan tüm veriyi, `?q=...` eklersen özel aramayı görürsün.")
 
 @bot.message_handler(commands=['liste'])
 def list_db(m):
     if not api_database:
-        return bot.reply_to(m, "📭 Şu an yüklü veri yok sevgilim.")
+        return bot.reply_to(m, "📭 Şu an yüklü veri yok.")
     
     text = "📂 **AKTİF APİ LİSTESİ**\n━━━━━━━━━━━━━━\n"
     for db_id in api_database.keys():
-        url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}?q="
-        text += f"📍 `{db_id}`\n🔗 [Link]({url})\n\n"
+        url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}"
+        text += f"📍 `{db_id}`\n🔗 [Hepsini Gör]({url})\n\n"
     bot.send_message(m.chat.id, text, disable_web_page_preview=True)
 
 @bot.message_handler(content_types=['document'])
@@ -108,7 +109,7 @@ def handle_docs(m):
     if ext not in ['.txt', '.json', '.py', '.csv']:
         return bot.reply_to(m, "❌ Format desteklenmiyor.")
 
-    msg = bot.reply_to(m, f"⚙️ `{raw_name}` **işleniyor...**")
+    msg = bot.reply_to(m, f"⚙️ `{raw_name}` **isleniyor...**")
     
     try:
         db_id = re.sub(r'\W+', '_', os.path.splitext(raw_name)[0]).lower()
@@ -118,13 +119,13 @@ def handle_docs(m):
         
         api_database[db_id] = process_any_file(content, ext)
         
-        search_url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}?q="
+        full_url = f"https://{RENDER_NAME}.onrender.com/api/v1/search/{db_id}"
 
         bot.edit_message_text(
-            f"✅ **NODE AKTİF EDİLDİ**\n\n"
+            f"✅ **NODE AKTİF**\n\n"
             f"📁 **ID:** `{db_id}`\n"
-            f"🔍 **Sorgu:** `{search_url}SORGU`\n\n"
-            f"💎 *Tarayıcıda artık veriler alt alta tertemiz görünecek.*",
+            f"🔗 **Tüm Verileri Gör:**\n`{full_url}`\n\n"
+            f"🔍 **Arama Yapmak İçin:**\n`{full_url}?q=SORGU`",
             m.chat.id, msg.message_id, disable_web_page_preview=True
         )
     except Exception as e:
