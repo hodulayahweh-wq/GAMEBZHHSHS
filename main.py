@@ -4,75 +4,83 @@ import re
 import threading
 import io
 import time
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
+from flask_cors import CORS
 
 # ================= AYARLAR =================
-TOKEN = "8369473810:AAG5KqjuNUxivnJOpNq6gFP1rm1AIDhtYaE"
+TOKEN = "8369473810:AAFDKtH5PJH08itewxcbYlw4UDS7iL6KaE4"
 RENDER_NAME = "gamebzhhshs" 
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
+CORS(app) 
+
 api_database = {}
 
-# ================= VERİ PAKETLEYİCİ =================
 def process_into_blocks(content):
-    # Veriyi çizgilerine göre bloklara ayırıyoruz
     raw_blocks = content.split("----------------")
     final_blocks = []
     for block in raw_blocks:
         clean_block = block.strip()
-        if clean_block and len(clean_block) > 10:
-            formatted_block = "----------------\n" + clean_block + "\n----------------"
-            final_blocks.append(formatted_block)
+        if len(clean_block) > 15:
+            final_blocks.append("----------------\n" + clean_block + "\n----------------")
     return final_blocks
 
-# ================= 🛡️ PHP PARAMETRE YAKALAYICI =================
-@app.route('/api/v1/search/<path:node_id>')
+# ================= 🌍 PHP & EVRENSEL ERİŞİM NOKTASI =================
+@app.route('/api/v1/search/<path:node_id>', methods=['GET', 'POST'])
 def api_gateway(node_id):
     node_id = node_id.lower()
     data = api_database.get(node_id)
     
     if data is None:
-        return "❌ Hata: API ID bulunamadı sevgilim.", 404
+        return jsonify({"success": False, "message": "API Düğümü (Node) bulunamadı sevgilim."}), 404
 
-    # PHP'den gelen tüm olası parametreleri tek tek yakalıyoruz
-    p_tc = request.args.get('tc', '').strip().upper()
-    p_ad = request.args.get('ad', '').strip().upper()
-    p_soyad = request.args.get('soyad', '').strip().upper()
-    p_genel = request.args.get('q', '').strip().upper() # Eski uyum için
+    # PHP'den gelen GET veya POST verilerini yakalıyoruz
+    args = request.args if request.method == 'GET' else request.form
+    
+    # --- PHP PANEL PARAMETRELERİ ---
+    p = {
+        "tc": args.get('tc', '').strip(),
+        "ad": args.get('ad', '').strip().upper(),
+        "soyad": args.get('soyad', '').strip().upper(),
+        "annetc": args.get('annetc', '').strip(),
+        "babatc": args.get('babatc', '').strip(),
+        "q": args.get('q', '').strip().upper() # Genel anahtar kelime
+    }
+
+    # Eğer hiçbir şey aranmıyorsa örnek göster
+    if not any(p.values()):
+        return "\n\n".join(data[:5]) + "\n\n... (Sorgu parametresi bekleniyor sevgilim)"
 
     results = []
-    
-    # Veri bloklarını tara
     for block in data:
-        block_up = block.upper()
+        b_up = block.upper()
         match = False
         
-        # 1. Eğer TC ile arama yapılıyorsa
-        if p_tc and f"TC: {p_tc}" in block_up:
+        # PHP sorgu önceliklerine göre filtreleme
+        if p["tc"] and (f"T.C: {p['tc']}" in b_up or f"TC: {p['tc']}" in b_up): 
             match = True
-        # 2. Eğer AD ve SOYAD birlikte arama yapılıyorsa (Nokta atışı!)
-        elif p_ad and p_soyad:
-            if f"ADI: {p_ad}" in block_up and f"SOYADI: {p_soyad}" in block_up:
+        elif p["annetc"] and f"ANNETC: {p['annetc']}" in b_up:
+            match = True
+        elif p["babatc"] and f"BABATC: {p['babatc']}" in b_up:
+            match = True
+        elif p["ad"] and p["soyad"]:
+            if f"ADI: {p['ad']}" in b_up and f"SOYADI: {p['soyad']}" in b_up:
                 match = True
-        # 3. Eğer sadece isim veya sadece soyisim aratılıyorsa
-        elif p_ad and f"ADI: {p_ad}" in block_up:
+        elif p["ad"] and f"ADI: {p['ad']}" in b_up:
             match = True
-        elif p_soyad and f"SOYADI: {p_soyad}" in block_up:
-            match = True
-        # 4. Genel arama parametresi 'q' gelmişse
-        elif p_genel and p_genel in block_up:
+        elif p["q"] and p["q"] in b_up:
             match = True
 
         if match:
             results.append(block)
 
     if not results:
-        return "❌ Aradığın kriterlerde kayıt bulunamadı sevgilim.", 404
+        return "❌ Aradığınız kriterlerde kayıt bulunamadı sevgilim.", 404
 
     return "\n\n".join(results)
 
-# ================= BOT VE SUNUCU BAŞLATICI =================
+# ================= BOT YÖNETİMİ =================
 @bot.message_handler(content_types=['document'])
 def handle_file(m):
     try:
@@ -81,14 +89,12 @@ def handle_file(m):
         down = bot.download_file(finfo.file_path)
         cont = down.decode('utf-8', errors='ignore')
         api_database[nid] = process_into_blocks(cont)
-        bot.reply_to(m, f"✅ **API Aktif!**\nID: `{nid}`\nURL: `https://{RENDER_NAME}.onrender.com/api/v1/search/{nid}`")
+        bot.reply_to(m, f"✅ **API PHP & DÜNYAYA AÇILDI!**\n\n📍 ID: `{nid}`\n🌍 Link: `https://{RENDER_NAME}.onrender.com/api/v1/search/{nid}`")
     except Exception as e:
         bot.reply_to(m, f"❌ Hata: {e}")
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
     while True:
-        try:
-            bot.polling(none_stop=True)
-        except:
-            time.sleep(5)
+        try: bot.polling(none_stop=True)
+        except: time.sleep(5)
