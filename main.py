@@ -7,7 +7,7 @@ import io
 from flask import Flask, request, jsonify
 
 # ================= AYARLAR =================
-TOKEN = "8118811696:AAEvD55aW7huynLUAlLy8Ynfqd-kea_neow"
+TOKEN = "8118811696:AAE-MMRdl1CVlfO6UmlZahN7n0_WBm7hEQ4"
 RENDER_NAME = "gamebzhhshs"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
