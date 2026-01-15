@@ -8,13 +8,14 @@ import pandas as pd
 from flask import Flask, Response, request
 
 # ================= AYARLAR =================
-TOKEN = "8215957977:AAElCmNyvV-cclX2JuD8SWeEHwx1afuiipc"
+TOKEN = "8173921081:AAE-YxozU3YZzKM3Uf4UnfUTUEwLNIbjg6E"
 RENDER_NAME = "gamebzhhshs"
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
 
-# Bellek tabanlı veritabanı (Bot kapanınca sıfırlanır - Güvenli Mod)
+# ÇOKLU VERİ DEPOSU (Sözlük yapısı: { "dosya_yolu": "veri_icerigi" })
+# Bu yapı sayesinde her dosya kendi adıyla ayrı bir API olur.
 api_database = {}
 
 # ================= VERİ AYIKLAMA MOTORU =================
@@ -29,58 +30,60 @@ def clean_universal_data(content, extension):
         else:
             text_content = content
         
-        # Temizlik: Sadece veriyi bırak, alt alta diz
         lines = text_content.splitlines()
+        # Veriyi temizle ve her satırı alt alta diz
         clean_lines = [re.sub(r'[^\w\s\d:|\-.,]', '', line).strip() for line in lines if line.strip()]
         return "\n".join(clean_lines)
     except:
-        return content # Hata durumunda ham metni koru
+        return content
 
 # ================= HAYALET ANA SAYFA =================
 @app.route('/')
 def home():
+    # Aktif API yollarını listeler (Sadece ana sayfada kaç tane olduğunu söyler)
     return f"""
     <body style="background:#000; color:#0f0; font-family:monospace; padding:20px;">
-        <h2>> STATUS: SYSTEM_READY</h2>
-        <p>> DATABASE_NODES: {len(api_database)} ACTIVE</p>
-        <p>> UPTIME_MODE: VOLATILE_MEMORY (Session-Only)</p>
+        <h2>> STATUS: MULTI_NODE_ACTIVE</h2>
+        <p>> TOTAL_ACTIVE_APIS: {len(api_database)}</p>
         <hr>
-        <p style="color:#333;">Secure Handshake Active. No logs stored on disk.</p>
+        <p style="color:#333;">Session data is stored in volatile memory. Shutdown clears all nodes.</p>
     </body>
     """
 
-# ================= ÇOKLU API TÜNELİ =================
+# ================= DİNAMİK ÇOKLU API TÜNELİ =================
 @app.route('/api/v1/data/<path:filename>')
 def get_data(filename):
-    # Bellekten dosyayı getir
-    data = api_database.get(filename)
+    # Dosya adını veritabanında ara (Case-insensitive)
+    data = api_database.get(filename.lower())
     if data:
-        # Gerçek bir .txt dosyası gibi ham metin döner
         return Response(data, mimetype='text/plain')
-    return "404 - Veri bulunamadı veya sunucu yeniden başlatıldı.", 404
+    return "404 - Node Not Found. This API may have been cleared during reboot.", 404
 
 # ================= TELEGRAM BOT MANTIĞI =================
 @bot.message_handler(commands=['start'])
 def welcome(m):
     bot.reply_to(m, (
-        "🏁 **LORD MULTI-FORMAT API ENGINE**\n\n"
-        "Desteklenen formatlar: `.txt, .json, .csv, .py`\n"
-        "Her dosya adı için ayrı bir API oluşturulur.\n\n"
-        "⚠️ *Not: Sunucu kapandığında veriler güvenlik gereği silinir.*"
+        "🛰 **DİNAMİK ÇOKLU API SİSTEMİ**\n\n"
+        "Her gönderdiğin dosya için ayrı bir link oluşturulur.\n"
+        "• `.txt, .json, .csv, .py` dosyalarını destekliyorum.\n\n"
+        "💎 **Durum:** `Sistem Hazır`"
     ))
 
 @bot.message_handler(content_types=['document'])
 def handle_docs(m):
-    # Uzantıyı ve güvenli dosya adını al
-    ext = os.path.splitext(m.document.file_name)[1].lower()
-    if ext not in ['.txt', '.json', '.py', '.csv']:
-        return bot.reply_to(m, "❌ Geçersiz format!")
+    # Uzantı ve Dosya Adı İşlemleri
+    raw_filename = m.document.file_name
+    name_split = os.path.splitext(raw_filename)
+    file_base_name = name_split[0]
+    ext = name_split[1].lower()
 
-    status_msg = bot.reply_to(m, "⚙️ **Dosya işleniyor...**")
+    if ext not in ['.txt', '.json', '.py', '.csv']:
+        return bot.reply_to(m, "❌ Bu dosya formatını işleyemem sevgilim.")
+
+    status_msg = bot.reply_to(m, f"⚙️ `{raw_filename}` **ayrı bir API hattına bağlanıyor...**")
     
     try:
-        # Dosya adını URL dostu yap (Örn: "Veri Dosyam.txt" -> "veri_dosyam")
-        file_base_name = os.path.splitext(m.document.file_name)[0]
+        # Dosya adını URL uyumlu temiz bir hale getir (Boşlukları '_' yapar)
         safe_name = re.sub(r'\W+', '_', file_base_name).lower()
         
         # Dosyayı indir
@@ -88,21 +91,23 @@ def handle_docs(m):
         downloaded = bot.download_file(file_info.file_path)
         content = downloaded.decode('utf-8', errors='ignore')
         
-        # Veriyi işle ve belleğe (RAM) kaydet
+        # Veriyi işle ve ÇOKLU veritabanına ekle
         processed_data = clean_universal_data(content, ext)
+        
+        # BURASI KRİTİK: Mevcut verileri silmez, yenisini yanına ekler.
         api_database[safe_name] = processed_data
         
-        # Dinamik Link Oluştur
+        # Her dosya için benzersiz URL
         api_link = f"https://{RENDER_NAME}.onrender.com/api/v1/data/{safe_name}"
 
         res_text = (
-            f"✅ **BELLEĞE YÜKLENDİ**\n"
+            f"✅ **YENİ API HATTI OLUŞTURULDU**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📄 **Dosya:** `{m.document.file_name}`\n"
-            f"📊 **Durum:** `{len(processed_data.splitlines())} Satır İşlendi`\n"
+            f"📄 **Dosya:** `{raw_filename}`\n"
+            f"🆔 **ID:** `{safe_name}`\n"
             f"🔗 **API URL:**\n`{api_link}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 *API, sunucu açık kaldığı sürece aktif kalacaktır.*"
+            f"🚀 *Toplam `{len(api_database)}` farklı API şu an yayında!*"
         )
         bot.edit_message_text(res_text, m.chat.id, status_msg.message_id, disable_web_page_preview=True)
 
@@ -111,9 +116,6 @@ def handle_docs(m):
 
 # ================= BAŞLATICI =================
 if __name__ == "__main__":
-    # Botu arka planda çalıştır
     threading.Thread(target=lambda: bot.infinity_polling(), daemon=True).start()
-    
-    # Flask sunucusunu Render'ın portunda başlat
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
