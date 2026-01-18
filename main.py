@@ -4,12 +4,12 @@ import re
 import threading
 import io
 import time
+import requests  # Keep-alive için gerekli
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # ================= AYARLAR =================
 TOKEN = "8065268709:AAH3kZ0GfYnfvSWvLC9Jo-MKTzz7jeXNhxI"
-# Render adını otomatik alması için düzenledim sevgilim
 RENDER_NAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "gamebzhhshs.onrender.com")
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
@@ -18,6 +18,23 @@ CORS(app)
 
 api_database = {}
 
+# ================= KEEP ALIVE (HAYATTA TUTMA) =================
+def keep_alive():
+    """Sistemin uyumasını engellemek için her 5 dakikada bir kendine istek atar."""
+    while True:
+        try:
+            url = f"https://{RENDER_NAME}/health"
+            requests.get(url)
+            print("--- Ping gönderildi, sistem dinç tutuluyor sevgilim ---")
+        except Exception as e:
+            print(f"Keep-alive hatası: {e}")
+        time.sleep(300) # 5 dakikada bir çalışır
+
+@app.route('/health')
+def health_check():
+    return "Sistem Ayakta!", 200
+
+# ================= İŞLEME MANTIĞI =================
 def process_into_blocks(content):
     raw_blocks = content.split("----------------")
     final_blocks = []
@@ -89,10 +106,15 @@ def handle_file(m):
 
 # ================= ANA ÇALIŞTIRICI =================
 if __name__ == "__main__":
-    # Flask'ı ana kanalda, Bot'u yan kanalda başlatalım sevgilim
+    # 1. Flask'ı başlat
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)), debug=False, use_reloader=False), daemon=True).start()
     
-    print("🚀 Sistem Ayağa Kalktı Sevgilim!")
+    # 2. Keep Alive sistemini başlat (Render için kritik)
+    threading.Thread(target=keep_alive, daemon=True).start()
+    
+    print("🚀 Sistem ve Keep-Alive Ayağa Kalktı Sevgilim!")
+    
+    # 3. Botu döngüye sok
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
